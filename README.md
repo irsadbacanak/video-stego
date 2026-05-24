@@ -7,7 +7,7 @@
 ```
 veri-gizleme/
 ├── video_io.py    — Video altyapısı (Kişi 1) ✅
-├── lsb.py         — LSB steganografi (Kişi 2) 🔲
+├── lsb.py         — LSB steganografi (Kişi 2) ✅
 ├── dwt_svd.py     — DWT-SVD watermarking (Kişi 3) 🔲
 ├── metrics.py     — Kalite metrikleri (Kişi 4) 🔲
 ├── ui.py          — Arayüz (Kişi 4) 🔲
@@ -85,7 +85,7 @@ with VideoSource(0) as src:
 
 ---
 
-### 🔲 lsb.py — Kişi 2 (Yapılacak)
+### ✅ lsb.py — Kişi 2 (Tamamlandı)
 
 - `embed(frame, message)` — mesajı kareye göm
 - `extract(frame)` — kareden mesajı çıkar
