@@ -100,3 +100,67 @@ def extract(frame: np.ndarray):
         return "text", data.decode("utf-8")
     else:
         return "image", data
+
+# ══════════════════════════════════════════════
+# 6. BAŞARI METRİKLERİ
+# ══════════════════════════════════════════════
+
+from skimage.metrics import peak_signal_noise_ratio as psnr
+from skimage.metrics import structural_similarity as ssim
+
+def calculate_psnr(original: np.ndarray, stego: np.ndarray) -> float:
+    """
+    PSNR hesaplar. Yüksek = iyi.
+    40 dB üzeri → gözle fark edilmez.
+    """
+    return psnr(original, stego, data_range=255)
+
+def calculate_ssim(original: np.ndarray, stego: np.ndarray) -> float:
+    """
+    SSIM hesaplar. 1'e yakın = iyi.
+    0.99+ → görsel kalite korunmuş.
+    """
+    return ssim(original, stego, channel_axis=2, data_range=255)
+
+def calculate_ber(original_message: str, extracted_message: str) -> float:
+    """
+    Bit Hata Oranı (BER).
+    0.0 → veri kayıpsız iletildi.
+    """
+    orig_bits = bytes_to_bits(original_message.encode("utf-8"))
+    extr_bits = bytes_to_bits(extracted_message.encode("utf-8"))
+    
+    min_len = min(len(orig_bits), len(extr_bits))
+    if min_len == 0:
+        return 1.0
+    
+    hatalar = sum(o != e for o, e in zip(orig_bits[:min_len], extr_bits[:min_len]))
+    return hatalar / min_len
+
+def evaluate(original: np.ndarray, stego: np.ndarray, message: str) -> dict:
+    """
+    Tek fonksiyonla tüm metrikleri hesaplar.
+    Kullanım: results = evaluate(frame, stego_frame, "mesaj")
+    """
+    _, extracted = extract(stego)
+    
+    results = {
+        "PSNR (dB)"  : calculate_psnr(original, stego),
+        "SSIM"       : calculate_ssim(original, stego),
+        "BER"        : calculate_ber(message, extracted),
+        "Kapasite"   : calculate_capacity(original),
+        "Mesaj boyutu (byte)": len(message.encode("utf-8")),
+        "Doluluk (%)" : len(message.encode("utf-8")) / calculate_capacity(original) * 100,
+    }
+    
+    print("=" * 35)
+    print("      LSB STEGANOGRAFİ METRİKLERİ")
+    print("=" * 35)
+    for k, v in results.items():
+        if isinstance(v, float):
+            print(f"  {k:<22}: {v:.4f}")
+        else:
+            print(f"  {k:<22}: {v}")
+    print("=" * 35)
+    
+    return results
