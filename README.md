@@ -90,7 +90,47 @@ with VideoSource(0) as src:
 - `embed(frame, message)` — mesajı kareye göm
 - `extract(frame)` — kareden mesajı çıkar
 
----
+**Neler yapıldı:**
+
+- `embed` — Metni video karesine LSB yöntemiyle gömer
+- `embed_image` — Resim dosyasını video karesine gömer
+- `extract` — Stego kareden metin veya resmi geri çıkarır
+- `calculate_capacity` — Bir kareye kaç byte sığacağını hesaplar
+- `build_payload` / `parse_payload` — Header sistemi (tip + boyut bilgisi)
+- `bytes_to_bits` / `bits_to_bytes` — Bit dönüşüm yardımcıları
+- `calculate_psnr` / `calculate_ssim` / `calculate_ber` — Kalite metrikleri
+- `evaluate` — Tek fonksiyonla tüm metrikleri hesaplar ve raporlar
+
+**Özellikler:**
+
+- Metin ve resim gömme desteği
+- Header sistemi sayesinde payload tipi ve boyutu otomatik algılanır
+- Kişi 1'in `VideoSource` / `VideoWriter` sınıflarıyla tam uyumlu
+- Her kareye bağımsız gömme/çıkarma yapılabilir
+
+**Test Sonuçları:**
+
+Kısa metin (31 byte):
+- PSNR: 88.85 dB ✅ (40 dB üzeri gözle fark edilmez)
+- SSIM: 1.0000 ✅ (birebir görsel kalite)
+- BER:  0.0000 ✅ (sıfır bit hatası)
+- Doluluk: %0.014
+
+Uzun metin (10.000 karakter):
+- PSNR: 64.30 dB ✅
+- SSIM: 0.9998 ✅
+- BER:  0.0000 ✅
+- Doluluk: %4.52
+
+Resim gömme (13.448 byte):
+- PSNR: 63.29 dB ✅
+- SSIM: 0.9997 ✅
+- BER:  0.0000 ✅ (resim birebir çıkarıldı)
+- Doluluk: %6.08
+
+- 
+- > Doluluk arttıkça PSNR düşmektedir, bu LSB yönteminin beklenen davranışıdır.
+> Tüm testlerde BER = 0.0000, veri kayıpsız iletim sağlanmıştır.
 
 ### 🔲 dwt_svd.py — Kişi 3 (Yapılacak)
 
