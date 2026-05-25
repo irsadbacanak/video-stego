@@ -56,20 +56,39 @@ def calculate_capacity(frame: np.ndarray) -> int:
 # 4. EMBED
 # ══════════════════════════════════════════════
 
-def embed(frame: np.ndarray, message: str) -> np.ndarray:
-    """Metni kareye gömer."""
-    data = message.encode("utf-8")
+def embed(frame: np.ndarray, payload) -> np.ndarray:
+    """
+    Kareye metin, bytes veya numpy array gömer.
+    - embed(frame, "metin")
+    - embed(frame, b"bytes")
+    - embed(frame, numpy_array)
+    """
+    # Payload tipine göre bytes'a çevir
+    if isinstance(payload, np.ndarray):
+        data = payload.tobytes()
+        payload_type = 1
+    elif isinstance(payload, bytes):
+        data = payload
+        payload_type = 1
+    elif isinstance(payload, str):
+        data = payload.encode("utf-8")
+        payload_type = 0
+    else:
+        raise TypeError(f"Desteklenmeyen payload tipi: {type(payload)}")
+
     if len(data) > calculate_capacity(frame):
-        raise ValueError(f"Mesaj çok uzun! Max {calculate_capacity(frame)} byte.")
-    bits = build_payload(data, payload_type=0)
+        raise ValueError(f"Payload çok büyük! Max {calculate_capacity(frame)} byte.")
+
+    bits = build_payload(data, payload_type=payload_type)
     stego = frame.copy().astype(np.uint8)
     flat = stego.flatten()
     for i, bit in enumerate(bits):
         flat[i] = (flat[i] & 0xFE) | bit
     return flat.reshape(frame.shape)
 
+
 def embed_image(frame: np.ndarray, image_path: str) -> np.ndarray:
-    """Resmi kareye gömer."""
+    """Resim dosyasını kareye gömer."""
     with open(image_path, "rb") as f:
         data = f.read()
     if len(data) > calculate_capacity(frame):
@@ -90,7 +109,7 @@ def extract(frame: np.ndarray):
     """
     Kareden payload çıkarır.
     Döner: ("text", "mesaj metni")
-        veya ("image", b"...png bytes...")
+        veya ("image", b"...bytes...")
     """
     try:
         flat = frame.flatten()
@@ -102,3 +121,4 @@ def extract(frame: np.ndarray):
             return "image", data
     except Exception as e:
         raise ValueError(f"Kareden veri çıkarılamadı: {e}")
+
