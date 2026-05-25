@@ -218,13 +218,13 @@ Aşağıdaki değerler `dwt_svd` modülünde Test 2 senaryosuna benzer koşullar
 
 ---
 
-### 🔲 metrics.py — Kişi 4 (Yapılacak)
+### 🔲 metrics.py — Kişi 4 (Tamamlandı)
 
 - `psnr(original, stego)` — Peak Signal-to-Noise Ratio
 - `ssim(original, stego)` — Structural Similarity Index
 - `ber(original_msg, extracted_msg)` — Bit Error Rate
 
-### 🔲 ui.py — Kişi 4 (Yapılacak)
+### 🔲 ui.py — Kişi 4 (Tamamlandı)
 
 - `launch()` — grafik arayüz
 
