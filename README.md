@@ -8,7 +8,7 @@
 veri-gizleme/
 ├── video_io.py    — Video altyapısı (Kişi 1) ✅
 ├── lsb.py         — LSB steganografi (Kişi 2) ✅
-├── dwt_svd.py     — DWT-SVD watermarking (Kişi 3) 🔲
+├── dwt_svd.py     — DWT-SVD watermarking (Kişi 3) ✅
 ├── metrics.py     — Kalite metrikleri (Kişi 4) 🔲
 ├── ui.py          — Arayüz (Kişi 4) 🔲
 ├── main.py        — Entegrasyon iskeleti
@@ -17,9 +17,15 @@ veri-gizleme/
 
 ## Kurulum
 
+macOS’ta Homebrew Python’da `pip` komutu olmayabilir; sistem geneli kurulum da PEP 668 nedeniyle engellenir. Sanal ortam kullanın:
+
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
+
+Her yeni terminalde: `source .venv/bin/activate`
 
 ## Kullanım
 
@@ -132,10 +138,83 @@ Resim gömme (13.448 byte):
 - > Doluluk arttıkça PSNR düşmektedir, bu LSB yönteminin beklenen davranışıdır.
 > Tüm testlerde BER = 0.0000, veri kayıpsız iletim sağlanmıştır.
 
-### 🔲 dwt_svd.py — Kişi 3 (Yapılacak)
+### ✅ dwt_svd.py — Kişi 3 (Tamamlandı)
 
 - `embed(frame, watermark, alpha=0.1)` — frekans alanında watermark göm
-- `extract(frame, original)` — watermark çıkar
+- `extract(frame, original, alpha=0.1)` — non-blind watermark çıkar
+- `normalized_correlation(watermark, recovered)` — şablon ile NC doğrulama
+
+**Neler yapıldı:**
+
+- `embed` — BGR kare → Y kanalı → Haar DWT (LL) → watermark SVD → `LL' = LL + α·U_w Σ_w V_w^T` → IDWT → stego BGR
+- `extract` — Orijinal ve stego karelerin LL farkından watermark kurtarır (`original` zorunlu)
+- `normalized_correlation` — Kurtarılan watermark ile şablon arasında NC (0–1)
+- Kişi 1 `split_ycbcr` / `merge_ycbcr` ile entegre; Cb/Cr değiştirilmez
+- Watermark: gri `ndarray` veya dosya yolu (`str`)
+
+**Testler:**
+
+```bash
+# 1. Import kontrolü
+python3 -c "from dwt_svd import embed, extract, normalized_correlation; print('OK')"
+
+# 2. Kare gömme / çıkarma + NC
+python3 -c "
+import numpy as np, cv2
+from dwt_svd import embed, extract, normalized_correlation
+frame = np.full((480, 640, 3), 128, dtype=np.uint8)
+wm = np.zeros((64, 64), dtype=np.uint8)
+cv2.putText(wm, 'TEST', (5, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, 255, 2)
+alpha = 0.1
+stego = embed(frame, wm, alpha=alpha)
+rec = extract(stego, frame, alpha=alpha)
+nc = normalized_correlation(wm, rec)
+mse = np.mean((frame.astype(float) - stego.astype(float)) ** 2)
+psnr = 10 * np.log10(255**2 / mse)
+print(f'PSNR: {psnr:.2f} dB, NC: {nc:.4f}')
+"
+
+# 3. Webcam önizleme (watermark dosyası ile)
+python3 -c "
+from video_io import VideoSource, run_preview_loop
+from dwt_svd import embed
+wm = 'watermark.png'  # veya sentetik ndarray
+with VideoSource(0) as src:
+    run_preview_loop(src, process_fn=lambda f: embed(f, wm, alpha=0.1))
+"
+```
+
+**Metrikler — genel referans değerleri**
+
+PSNR, orijinal kare ile stego kare arasındaki farkı ölçer (dB — yüksek = daha az bozulma):
+
+| PSNR | Anlam (kabaca) |
+|---|---|
+| **40+ dB** | İnsan gözüyle neredeyse ayırt edilemez |
+| **30–40 dB** | Küçük fark var; çoğu senaryoda kabul edilebilir |
+| **30 altı** | Fark daha belirgin olabilir |
+
+NC (Normalized Correlation), kurtarılan watermark ile gömülen şablonun benzerliğini ölçer (0–1):
+
+| NC | Anlam (kabaca) |
+|---|---|
+| **≥ 0.90** | Watermark güvenilir şekilde kurtarıldı |
+| **0.70 – 0.90** | Kısmen benzer; parametre veya host etkisi olabilir |
+| **< 0.70** | Zayıf veya başarısız çıkarma |
+
+**Elde edilen test sonuçları**
+
+Aşağıdaki değerler `dwt_svd` modülünde Test 2 senaryosuna benzer koşullarda ölçülmüştür (480×640 host, 64×64 `TEST` watermark, Haar DWT, `alpha` embed/extract'te aynı):
+
+| Senaryo | alpha | PSNR | NC | Değerlendirme |
+|---|---|---|---|---|
+| Düz gri host (128) — README Test 2 | 0.1 | **36.16 dB** | **0.9988** | PSNR: kabul edilebilir; NC: başarılı |
+| Düz gri host (128) | 0.2 | **29.78 dB** | **0.9988** | PSNR: sınırda (30 dB altına yakın); NC: başarılı |
+| Rastgele host | 0.1 | **36.19 dB** | **0.9987** | PSNR: kabul edilebilir; NC: başarılı |
+
+> **Özet:** Tüm senaryolarda NC ≈ 0.999 → watermark doğru çıkarılıyor. PSNR, `alpha` ve host tipine bağlı olarak 30–36 dB aralığında; `alpha` büyüdükçe watermark güçlenir, PSNR düşer.
+>
+> Çıkarma **non-blind**'dır: `extract` için orijinal kare gerekir. LSB'den farklı olarak metin değil, görsel watermark (logo/imza) için uygundur.
 
 ---
 
@@ -157,3 +236,4 @@ Resim gömme (13.448 byte):
 |---|---|
 | opencv-python | ≥ 4.8 |
 | numpy | ≥ 1.24 |
+| PyWavelets | ≥ 1.4 |
