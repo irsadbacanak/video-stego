@@ -60,7 +60,13 @@ def embed(frame: np.ndarray, watermark: np.ndarray | str, alpha: float = 0.1) ->
     uw, sw, vtw = _svd(w_resized)
     w_svd = _reconstruct_from_svd(uw, sw, vtw)
 
-    ll_new = ll + alpha * w_svd
+    # [-1,1] normalize et, sonra LL'nin std'siyle ölçekle:
+    # alpha=0.1 → ~LL_std*0.1 katkı → PSNR ~40 dB (gizli)
+    # alpha=0.5 → ~LL_std*0.5 katkı → PSNR ~25 dB (görünür)
+    w_max = np.abs(w_svd).max()
+    if w_max > 1e-8:
+        w_svd = w_svd / w_max  # [-1, 1]
+    ll_new = ll + alpha * 200.0 * w_svd
     y_new = _dwt_reconstruct(ll_new, details)
     y_new = np.clip(y_new, 0, 255).astype(np.uint8)
 
