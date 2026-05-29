@@ -56,35 +56,22 @@ def calculate_capacity(frame: np.ndarray) -> int:
 # 4. EMBED
 # ══════════════════════════════════════════════
 
-def embed(frame: np.ndarray, payload) -> np.ndarray:
-    """
-    Kareye metin, bytes veya numpy array gömer.
-    - embed(frame, "metin")
-    - embed(frame, b"bytes")
-    - embed(frame, numpy_array)
-    """
-    # Payload tipine göre bytes'a çevir
-    if isinstance(payload, np.ndarray):
-        data = payload.tobytes()
-        payload_type = 1
-    elif isinstance(payload, bytes):
-        data = payload
-        payload_type = 1
-    elif isinstance(payload, str):
-        data = payload.encode("utf-8")
-        payload_type = 0
-    else:
-        raise TypeError(f"Desteklenmeyen payload tipi: {type(payload)}")
 
+def _embed_bits(frame: np.ndarray, bits: list) -> np.ndarray:
+    n = len(bits)
+    stego = np.array(frame, copy=True, dtype=np.uint8)
+    flat = stego.ravel()
+    idx = np.arange(n, dtype=np.intp)
+    flat[idx] = (flat[idx] & 0xFE) | np.asarray(bits, dtype=np.uint8)
+    return stego
+
+
+def embed(frame: np.ndarray, message: str) -> np.ndarray:
+    """Metni kareye gömer."""
+    data = message.encode("utf-8")
     if len(data) > calculate_capacity(frame):
-        raise ValueError(f"Payload çok büyük! Max {calculate_capacity(frame)} byte.")
-
-    bits = build_payload(data, payload_type=payload_type)
-    stego = frame.copy().astype(np.uint8)
-    flat = stego.flatten()
-    for i, bit in enumerate(bits):
-        flat[i] = (flat[i] & 0xFE) | bit
-    return flat.reshape(frame.shape)
+        raise ValueError(f"Mesaj çok uzun! Max {calculate_capacity(frame)} byte.")
+    return _embed_bits(frame, build_payload(data, payload_type=0))
 
 
 def embed_image(frame: np.ndarray, image_path: str) -> np.ndarray:
@@ -93,17 +80,16 @@ def embed_image(frame: np.ndarray, image_path: str) -> np.ndarray:
         data = f.read()
     if len(data) > calculate_capacity(frame):
         raise ValueError(f"Resim çok büyük! Max {calculate_capacity(frame)} byte.")
-    bits = build_payload(data, payload_type=1)
-    stego = frame.copy().astype(np.uint8)
-    flat = stego.flatten()
-    for i, bit in enumerate(bits):
-        flat[i] = (flat[i] & 0xFE) | bit
-    return flat.reshape(frame.shape)
+    return _embed_bits(frame, build_payload(data, payload_type=1))
 
 
 # ══════════════════════════════════════════════
 # 5. EXTRACT
 # ══════════════════════════════════════════════
+
+def _read_lsb_bits(flat: np.ndarray, num_bits: int) -> list:
+    return (flat[:num_bits] & 1).astype(np.uint8).tolist()
+
 
 def extract(frame: np.ndarray):
     """
@@ -112,9 +98,12 @@ def extract(frame: np.ndarray):
         veya ("image", b"...bytes...")
     """
     try:
-        flat = frame.flatten()
-        bits = [int(p) & 1 for p in flat]
-        payload_type, data = parse_payload(bits)
+        flat = frame.ravel()
+        header_bits = 40  # 1 tip + 4 boyut byte
+        header_raw = bits_to_bytes(_read_lsb_bits(flat, header_bits))
+        size = int.from_bytes(header_raw[1:5], "big")
+        total_bits = (5 + size) * 8
+        payload_type, data = parse_payload(_read_lsb_bits(flat, total_bits))
         if payload_type == 0:
             return "text", data.decode("utf-8")
         else:

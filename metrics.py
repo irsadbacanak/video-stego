@@ -52,7 +52,5 @@ def rs_analysis(stego: np.ndarray) -> float:
 
     
     ratio = d_original / (d_flipped + 1e-5)
-    
-    z
     risk_score = max(0.0, min(1.0, (ratio - 0.85) * 6.66)) 
     return risk_score
