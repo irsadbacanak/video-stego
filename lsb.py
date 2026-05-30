@@ -3,6 +3,8 @@
 import numpy as np
 import cv2
 
+DEFAULT_KEY = 42
+
 
 # ══════════════════════════════════════════════
 # 1. YARDIMCI FONKSİYONLAR
@@ -56,42 +58,42 @@ def calculate_capacity(frame: np.ndarray) -> int:
 # 4. EMBED
 # ══════════════════════════════════════════════
 
+def _pixel_indices(total: int, n: int, key: int) -> np.ndarray:
+    """Anahtar ile belirlenmiş, tekrarlanabilir rastgele piksel indeksleri üretir."""
+    return np.random.default_rng(key).permutation(total)[:n]
 
-def _embed_bits(frame: np.ndarray, bits: list) -> np.ndarray:
+
+def _embed_bits(frame: np.ndarray, bits: list, key: int = DEFAULT_KEY) -> np.ndarray:
     n = len(bits)
     stego = np.array(frame, copy=True, dtype=np.uint8)
     flat = stego.ravel()
-    idx = np.arange(n, dtype=np.intp)
+    idx = _pixel_indices(len(flat), n, key)
     flat[idx] = (flat[idx] & 0xFE) | np.asarray(bits, dtype=np.uint8)
     return stego
 
 
-def embed(frame: np.ndarray, message: str) -> np.ndarray:
+def embed(frame: np.ndarray, message: str, key: int = DEFAULT_KEY) -> np.ndarray:
     """Metni kareye gömer."""
     data = message.encode("utf-8")
     if len(data) > calculate_capacity(frame):
         raise ValueError(f"Mesaj çok uzun! Max {calculate_capacity(frame)} byte.")
-    return _embed_bits(frame, build_payload(data, payload_type=0))
+    return _embed_bits(frame, build_payload(data, payload_type=0), key)
 
 
-def embed_image(frame: np.ndarray, image_path: str) -> np.ndarray:
+def embed_image(frame: np.ndarray, image_path: str, key: int = DEFAULT_KEY) -> np.ndarray:
     """Resim dosyasını kareye gömer."""
     with open(image_path, "rb") as f:
         data = f.read()
     if len(data) > calculate_capacity(frame):
         raise ValueError(f"Resim çok büyük! Max {calculate_capacity(frame)} byte.")
-    return _embed_bits(frame, build_payload(data, payload_type=1))
+    return _embed_bits(frame, build_payload(data, payload_type=1), key)
 
 
 # ══════════════════════════════════════════════
 # 5. EXTRACT
 # ══════════════════════════════════════════════
 
-def _read_lsb_bits(flat: np.ndarray, num_bits: int) -> list:
-    return (flat[:num_bits] & 1).astype(np.uint8).tolist()
-
-
-def extract(frame: np.ndarray):
+def extract(frame: np.ndarray, key: int = DEFAULT_KEY):
     """
     Kareden payload çıkarır.
     Döner: ("text", "mesaj metni")
@@ -99,11 +101,20 @@ def extract(frame: np.ndarray):
     """
     try:
         flat = frame.ravel()
-        header_bits = 40  # 1 tip + 4 boyut byte
-        header_raw = bits_to_bytes(_read_lsb_bits(flat, header_bits))
+        total = len(flat)
+        # Gömme ile aynı anahtar kullanılarak indeksler yeniden üretilir
+        all_idx = np.random.default_rng(key).permutation(total)
+
+        header_count = 40  # 1 tip + 4 boyut byte = 5 byte = 40 bit
+        header_raw = bits_to_bytes((flat[all_idx[:header_count]] & 1).astype(np.uint8).tolist())
         size = int.from_bytes(header_raw[1:5], "big")
         total_bits = (5 + size) * 8
-        payload_type, data = parse_payload(_read_lsb_bits(flat, total_bits))
+
+        if total_bits > total:
+            raise ValueError("Geçersiz payload boyutu")
+
+        payload_bits = (flat[all_idx[:total_bits]] & 1).astype(np.uint8).tolist()
+        payload_type, data = parse_payload(payload_bits)
         if payload_type == 0:
             return "text", data.decode("utf-8")
         else:

@@ -60,9 +60,6 @@ def embed(frame: np.ndarray, watermark: np.ndarray | str, alpha: float = 0.1) ->
     uw, sw, vtw = _svd(w_resized)
     w_svd = _reconstruct_from_svd(uw, sw, vtw)
 
-    # [-1,1] normalize et, sonra LL'nin std'siyle ölçekle:
-    # alpha=0.1 → ~LL_std*0.1 katkı → PSNR ~40 dB (gizli)
-    # alpha=0.5 → ~LL_std*0.5 katkı → PSNR ~25 dB (görünür)
     w_max = np.abs(w_svd).max()
     if w_max > 1e-8:
         w_svd = w_svd / w_max  # [-1, 1]
@@ -90,20 +87,26 @@ def extract(
     ll_orig, _ = _dwt_decompose(y_orig)
     ll_stego, _ = _dwt_decompose(y_stego)
 
-    w_rec = (ll_stego - ll_orig) / alpha
+    # alpha * 200.0 ile böl — embed'deki ölçeklemeyi tam tersine çevirir
+    w_rec = (ll_stego - ll_orig) / (alpha * 200.0)
     return np.clip(w_rec, 0, 255).astype(np.float64)
 
 
 def normalized_correlation(
-    watermark: np.ndarray, recovered: np.ndarray
+    watermark: np.ndarray | str, recovered: np.ndarray
 ) -> float:
-    """Kurtarılan watermark ile şablon arasındaki normalleştirilmiş korelasyon (NC)."""
+    """
+    Standart NC: Σ(W · W_rec) / sqrt(Σ(W²) · Σ(W_rec²))
+
+    Önceki Pearson formülü ortalamayı çıkarıyordu ve ölçek/offset
+    hatalarına kördu (her zaman ~1.0 veriyordu). Bu formül gerçek
+    benzerliği ölçer; bozulan ya da yanlış watermark'ta NC düşer.
+    """
     w = _to_grayscale(watermark).astype(np.float64)
     r = recovered.astype(np.float64)
     r_resized = cv2.resize(r, (w.shape[1], w.shape[0]), interpolation=cv2.INTER_AREA)
-    w_norm = w - w.mean()
-    r_norm = r_resized - r_resized.mean()
-    denom = np.linalg.norm(w_norm) * np.linalg.norm(r_norm)
+    num = np.sum(w * r_resized)
+    denom = np.sqrt(np.sum(w ** 2) * np.sum(r_resized ** 2))
     if denom < 1e-10:
         return 0.0
-    return float(np.sum(w_norm * r_norm) / denom)
+    return float(np.clip(num / denom, 0.0, 1.0))
