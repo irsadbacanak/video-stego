@@ -188,6 +188,17 @@ def _compare_stream() -> None:
                   delta="Iyi" if nc_dwt > 0.7 else "Zayif",
                   delta_color="normal" if nc_dwt > 0.7 else "inverse")
 
+        # LSB'den çıkarılan veri
+        st.markdown("**LSB — Cikartilan Veri**")
+        try:
+            kind, extracted_text = lsb.extract(s_lsb)
+            if kind == "text":
+                st.success(f"📝 {extracted_text}")
+            else:
+                st.info("Gizlenen veri metin degil (resim/binary).")
+        except Exception as ex:
+            st.warning(f"Veri cikarilamadi: {ex}")
+
     except Exception as e:
         st.error(f"Karsilastirma hatasi: {e}")
         st.session_state["compare_running"] = False
